@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代幣上限計算器</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #1c1e21;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        .input-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #606770;
+            font-weight: bold;
+            font-size: 0.95em;
+        }
+        input[type="number"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            font-size: 1em;
+        }
+        .time-input-group {
+            display: flex;
+            align-items: center;
+        }
+        .time-input-group input[type="number"] {
+            width: 60px;
+            margin-right: 8px;
+            text-align: center;
+        }
+        .time-input-group span {
+            margin-right: 15px;
+            color: #606770;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #1877f2; /* Facebook Blue */
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #166fe5;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e7f3ff;
+            border: 1px solid #bde0ff;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1.05em;
+            color: #0c5460;
+            min-height: 50px; /* Ensure space even if empty */
+            line-height: 1.6;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .fixed-info {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 0.85em;
+            color: #606770;
+        }
+        .fixed-info p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>代幣上限計算器</h1>
+
+        <div class="input-group">
+            <label for="currentTokens">目前代幣數量 (0-199):</label>
+            <input type="number" id="currentTokens" min="0" max="199" placeholder="例如：80">
+        </div>
+
+        <div class="input-group">
+            <label>下次刷新還需：</label>
+            <div class="time-input-group">
+                <input type="number" id="hoursUntilNext" min="0" max="23" placeholder="時">
+                <span>時</span>
+                <input type="number" id="minutesUntilNext" min="0" max="59" placeholder="分">
+                <span>分</span>
+            </div>
+        </div>
+
+        <button onclick="calculateCapTime()">計算</button>
+
+        <div id="resultArea" class="result">
+            請輸入數值並點擊計算
+        </div>
+
+        <div class="fixed-info">
+            <p><strong>固定資訊：</strong></p>
+            <p>- 代幣上限：200</p>
+            <p>- 每次恢復：20</p>
+            <p>- 恢復間隔：2小時24分鐘</p>
+        </div>
+    </div>
+
+    <script>
+        const MAX_TOKENS = 200;
+        const TOKENS_PER_REFRESH = 20;
+        const REFRESH_INTERVAL_MINUTES = 144; // 2 小時 24 分鐘
+
+        function calculateCapTime() {
+            const currentTokensInput = document.getElementById('currentTokens');
+            const hoursInput = document.getElementById('hoursUntilNext');
+            const minutesInput = document.getElementById('minutesUntilNext');
+            const resultArea = document.getElementById('resultArea');
+
+            resultArea.className = 'result'; // Reset class
+
+            const currentTokens = parseInt(currentTokensInput.value);
+            let hoursUntilNext = parseInt(hoursInput.value);
+            let minutesUntilNext = parseInt(minutesInput.value);
+
+            // --- Input Validation ---
+            if (isNaN(currentTokens)) {
+                resultArea.textContent = '錯誤：請輸入目前代幣數量。';
+                resultArea.classList.add('error');
+                return;
+            }
+            if (currentTokens < 0 || currentTokens >= MAX_TOKENS) {
+                 if (currentTokens >= MAX_TOKENS) {
+                    resultArea.textContent = '代幣已滿或超過上限！';
+                 } else {
+                    resultArea.textContent = '錯誤：代幣數量必須介于 0 和 199 之間。';
+                    resultArea.classList.add('error');
+                 }
+                return;
+            }
+
+            if (isNaN(hoursUntilNext) && isNaN(minutesUntilNext)) {
+                 // If both are empty, assume 0 for timer (next refresh is now, or we just care about current tokens)
+                 // More logically, if user knows next refresh is 2h away, they should enter it.
+                 // Let's treat it as user hasn't specified the *delay* to the *next known refresh cycle start*
+                 // This means the current tokens are what they are, and the *first* refresh will happen after `hoursUntilNext` and `minutesUntilNext`
+                 // If they are blank, means the next known refresh is 0 minutes away.
+                 hoursUntilNext = 0;
+                 minutesUntilNext = 0;
+            } else {
+                if (isNaN(hoursUntilNext)) hoursUntilNext = 0;
+                if (isNaN(minutesUntilNext)) minutesUntilNext = 0;
+            }
+
+            if (hoursUntilNext < 0 || hoursUntilNext > 23 || minutesUntilNext < 0 || minutesUntilNext > 59) {
+                resultArea.textContent = '錯誤：下次刷新時間的小時或分鐘數值無效。';
+                resultArea.classList.add('error');
+                return;
+            }
+            // --- End Input Validation ---
+
+
+            let tokens = currentTokens;
+            const now = new Date();
+
+            // Calculate time of the very first upcoming refresh
+            let minutesToFirstRefresh = (hoursUntilNext * 60) + minutesUntilNext;
+            let firstRefreshDateTime = new Date(now.getTime() + minutesToFirstRefresh * 60000);
+
+            // If tokens are already >= MAX_TOKENS (this check is also above, but good to have here for logic flow)
+            if (tokens >= MAX_TOKENS) {
+                resultArea.textContent = '代幣已滿！';
+                return;
+            }
+
+            // Tokens after this *first* upcoming refresh
+            let tokensAfterFirstRefresh = tokens + TOKENS_PER_REFRESH;
+            
+            let capDateTime;
+
+            if (tokensAfterFirstRefresh >= MAX_TOKENS) {
+                // Max capacity reached at the first upcoming refresh
+                capDateTime = firstRefreshDateTime;
+            } else {
+                // Need more refreshes after the first one
+                let tokensStillNeeded = MAX_TOKENS - tokensAfterFirstRefresh;
+                let subsequentRefreshCyclesNeeded = Math.ceil(tokensStillNeeded / TOKENS_PER_REFRESH);
+                let additionalMinutesNeeded = subsequentRefreshCyclesNeeded * REFRESH_INTERVAL_MINUTES;
+                
+                capDateTime = new Date(firstRefreshDateTime.getTime() + additionalMinutesNeeded * 60000);
+            }
+
+            // Format the output
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+
+            const capDateOnly = new Date(capDateTime.getFullYear(), capDateTime.getMonth(), capDateTime.getDate());
+
+            let dayPrefix = "";
+            if (capDateOnly.getTime() === today.getTime()) {
+                dayPrefix = "今天 ";
+            } else if (capDateOnly.getTime() === tomorrow.getTime()) {
+                dayPrefix = "明天 ";
+            } else {
+                dayPrefix = `${capDateTime.getMonth() + 1}月${capDateTime.getDate()}日 `;
+            }
+
+            const hours = capDateTime.getHours().toString().padStart(2, '0');
+            const minutes = capDateTime.getMinutes().toString().padStart(2, '0');
+
+            resultArea.textContent = `代幣將在：${dayPrefix}${hours}:${minutes} 達到上限 (${MAX_TOKENS})`;
+        }
+
+        // Initialize with default values or clear placeholders
+        document.addEventListener('DOMContentLoaded', () => {
+             document.getElementById('currentTokens').value = '';
+             document.getElementById('hoursUntilNext').value = '';
+             document.getElementById('minutesUntilNext').value = '';
+        });
+
+    </script>
+</body>
+</html>
